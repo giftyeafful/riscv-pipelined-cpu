@@ -80,7 +80,70 @@ module riscv_cpu_tb;
 
         $display("LW PASSED: x4 = 15");
 
-        $display("All CPU Memory Integration tests PASSED!");
+        // Test 6: BEQ x1, x1, 8
+        // Branch from PC 20 to PC 28
+        @(posedge clk);
+        #1;
+
+        if (PC_out !== 32'd28)
+            $fatal(1, "BEQ FAILED! PC = %0d", PC_out);
+
+        $display("BEQ PASSED: PC = %0d", PC_out);
+
+        // Test 7: JAL x6, 8
+        // Jump from PC 28 to PC 36
+        // Save return address 32 in x6
+        @(posedge clk);
+        #1;
+
+        if (PC_out !== 32'd36 ||
+            dut.rf.registers[6] !== 32'd32)
+            $fatal(1, "JAL FAILED!");
+
+        $display("JAL PASSED: x6 = %0d",
+                 dut.rf.registers[6]);
+
+        // Test 8: ADDI x8, x0, 40
+        @(posedge clk);
+        #1;
+
+        if (dut.rf.registers[8] !== 32'd40)
+            $fatal(1, "ADDI x8 FAILED!");
+
+        $display("ADDI x8 PASSED: x8 = 40");
+
+        // Test 9: JALR x7, 8(x8)
+        // Jump from PC 40 to PC 48
+        // Save return address 44 in x7
+        @(posedge clk);
+        #1;
+
+        if (PC_out !== 32'd48 ||
+            dut.rf.registers[7] !== 32'd44)
+            $fatal(1, "JALR FAILED!");
+
+        $display("JALR PASSED: x7 = %0d",
+                 dut.rf.registers[7]);
+
+        // Test 10: ADDI x5, x0, 66
+        @(posedge clk);
+        #1;
+
+        if (dut.rf.registers[5] !== 32'd66)
+            $fatal(1, "ADDI x5 FAILED!");
+
+        $display("ADDI x5 PASSED: x5 = 66");
+
+        // Test 11: ADDI x9, x0, 42
+        @(posedge clk);
+        #1;
+
+        if (dut.rf.registers[9] !== 32'd42)
+            $fatal(1, "ADDI x9 FAILED!");
+
+        $display("ADDI x9 PASSED: x9 = 42");
+
+        $display("All CPU Integration tests PASSED!");
 
         $finish;
 
