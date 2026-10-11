@@ -16,6 +16,7 @@ module riscv_cpu (
 
     logic [31:0] ALU_B;
     logic [31:0] ALUResult;
+    logic [31:0] MemoryReadData;
     logic [31:0] WriteBackData;
 
     logic Zero;
@@ -84,15 +85,16 @@ module riscv_cpu (
         .WriteAddr(Instruction[11:7]),
         .WriteData(WriteBackData),
         .RegWrite(RegWrite && !reset)
-    );
+    );  
 
+    //5. Immediate Generator
     immediate_generator imm_gen (
          .instruction(Instruction),
          .ImmType(ImmType),
         .immediate(ImmExt)
      );
 
-    // 6. ALU Control
+    // 6. ALU Control Decoder
     alu_control alu_decoder (
         .ALUOp(ALUOp),
         .funct3(funct3),
@@ -101,10 +103,12 @@ module riscv_cpu (
         .ALUControl(ALUControl)
     );
 
-    // 7. ALU operand selection
+
+    //7. ALU Operand Multiplexer 
     assign ALU_B = ALUSrc ? ImmExt : RD2;
 
-    // 8. ALU
+
+    //8. Arithmetic Logic Unit
     alu alu_unit (
         .A(RD1),
         .B(ALU_B),
@@ -113,7 +117,20 @@ module riscv_cpu (
         .Zero(Zero)
     );
 
-    // Arithmetic-only write-back for first milestone
-    assign WriteBackData = ALUResult;
+    //9. Data Memory
+    data_memory dmem (
+        .clk(clk),
+        .MemWrite(MemWrite && !reset),
+        .MemRead(MemRead),
+        .address(ALUResult),
+        .WriteData(RD2),
+        .ReadData(MemoryReadData)
+    );
+
+    //10. Write-Back Multiplexer
+     assign WriteBackData =
+        (ResultSrc == 2'b01)
+        ? MemoryReadData
+        : ALUResult;
 
 endmodule
