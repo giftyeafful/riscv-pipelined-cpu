@@ -292,7 +292,6 @@ module riscv_pipelined_cpu (
     logic [31:0] SrcAE, SrcBE, ForwardedBE;
     logic [31:0] ALUResultE, PCPlus4E;
     logic [31:0] PCTargetE;
-    logic ZeroE;
 
     // EX/MEM stage signals
     logic [31:0] ALUResultM, WriteDataM, PCPlus4M;
