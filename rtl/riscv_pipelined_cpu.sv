@@ -2,7 +2,18 @@
 module riscv_pipelined_cpu (
     input  logic        clk,
     input  logic        reset,
-    output logic [31:0] PC_out
+    output logic [31:0] PC_out,
+
+    // Debug signal selection:
+    // 00 = Execute ALU result
+    // 01 = Writeback data
+    // 10 = Memory address
+    // 11 = Fetched instruction
+    input  logic [1:0]  DebugSelect,
+    output logic [31:0] DebugData,
+    output logic [4:0]  DebugWriteBackRegister,
+    output logic        DebugRegWrite,
+    output logic        DebugMemoryWrite
 );
 
     // ============================================
@@ -90,27 +101,27 @@ module riscv_pipelined_cpu (
         (OpcodeD == 7'b1100111) &&
         (Funct3D == 3'b000);
 
-    // Which instructions actually read rs1 / rs2?
+    // Identify instructions that use rs1 and rs2
     always_comb begin
         UsesRs1D = 1'b0;
         UsesRs2D = 1'b0;
 
         case (OpcodeD)
-            7'b0110011: begin // R-type
+            7'b0110011: begin
                 UsesRs1D = 1'b1;
                 UsesRs2D = 1'b1;
             end
-            7'b0010011: UsesRs1D = 1'b1; // I-type ALU
-            7'b0000011: UsesRs1D = 1'b1; // Load
-            7'b0100011: begin             // Store
+            7'b0010011: UsesRs1D = 1'b1;
+            7'b0000011: UsesRs1D = 1'b1;
+            7'b0100011: begin
                 UsesRs1D = 1'b1;
                 UsesRs2D = 1'b1;
             end
-            7'b1100011: begin             // Branch
+            7'b1100011: begin
                 UsesRs1D = 1'b1;
                 UsesRs2D = 1'b1;
             end
-            7'b1100111: UsesRs1D = 1'b1; // JALR
+            7'b1100111: UsesRs1D = 1'b1;
             default: begin end
         endcase
     end
@@ -142,7 +153,7 @@ module riscv_pipelined_cpu (
         .immediate(ImmFromGenD)
     );
 
-    // B-type and J-type immediates.
+    // B-type immediate
     assign BranchImmD = {
         {19{InstrD[31]}},
         InstrD[31],
@@ -152,6 +163,7 @@ module riscv_pipelined_cpu (
         1'b0
     };
 
+    // J-type immediate
     assign JumpImmD = {
         {11{InstrD[31]}},
         InstrD[31],
@@ -161,7 +173,7 @@ module riscv_pipelined_cpu (
         1'b0
     };
 
-    // Explicit jump/branch handling.
+    // Branch and jump control
     always_comb begin
         RegWriteD  = CURegWriteD;
         ALUSrcD    = CUALUSrcD;
@@ -200,8 +212,7 @@ module riscv_pipelined_cpu (
     end
 
     // ============================================
-    // WRITE-BACK SIGNALS (declared early because
-    // the register file is used in Decode)
+    // WRITEBACK SIGNALS
     // ============================================
     logic [31:0] WriteBackDataW;
     logic [4:0] RdW;
@@ -218,8 +229,7 @@ module riscv_pipelined_cpu (
         .RegWrite(RegWriteW && !reset)
     );
 
-    // WB-to-ID bypass prevents reading stale data
-    // when WB writes on the same clock edge.
+    // Writeback-to-decode bypass
     assign RD1D =
         (RegWriteW && RdW != 5'd0 && RdW == Rs1D)
         ? WriteBackDataW : RD1RawD;
@@ -229,7 +239,7 @@ module riscv_pipelined_cpu (
         ? WriteBackDataW : RD2RawD;
 
     // ============================================
-    // ID/EX REGISTER
+    // ID/EX PIPELINE REGISTER
     // ============================================
     logic [31:0] PCE, RD1E, RD2E, ImmExtE;
     logic [4:0] Rs1E, Rs2E, RdE;
@@ -274,8 +284,7 @@ module riscv_pipelined_cpu (
         .Jump_out(JumpE)
     );
 
-    // Extra metadata needed to distinguish
-    // JAL from JALR in the Execute stage.
+    // JALR metadata pipeline register
     logic IsJALRE;
 
     always_ff @(posedge clk) begin
@@ -293,7 +302,7 @@ module riscv_pipelined_cpu (
     logic [31:0] ALUResultE, PCPlus4E;
     logic [31:0] PCTargetE;
 
-    // EX/MEM stage signals
+    // EX/MEM signals
     logic [31:0] ALUResultM, WriteDataM, PCPlus4M;
     logic [4:0] RdM;
     logic RegWriteM, MemWriteM, MemReadM;
@@ -338,12 +347,12 @@ module riscv_pipelined_cpu (
         .B(SrcBE),
         .ALUControl(ALUControlE),
         .Result(ALUResultE),
-        .Zero(ZeroE)
+        .Zero()
     );
 
     assign PCPlus4E = PCE + 32'd4;
 
-    // Branches and jumps resolve in Execute.
+    // Branch and jump resolution
     assign PCSrcE =
         (BranchE && (SrcAE == ForwardedBE)) ||
         JumpE;
@@ -376,7 +385,7 @@ module riscv_pipelined_cpu (
     );
 
     // ============================================
-    // EX/MEM REGISTER
+    // EX/MEM PIPELINE REGISTER
     // ============================================
     ex_mem_register ex_mem (
         .clk(clk),
@@ -415,7 +424,7 @@ module riscv_pipelined_cpu (
     );
 
     // ============================================
-    // MEM/WB REGISTER
+    // MEM/WB PIPELINE REGISTER
     // ============================================
     logic [31:0] ALUResultW;
     logic [31:0] ReadDataW;
@@ -441,7 +450,7 @@ module riscv_pipelined_cpu (
     );
 
     // ============================================
-    // WRITE-BACK STAGE (W)
+    // WRITEBACK STAGE (W)
     // ============================================
     always_comb begin
         case (ResultSrcW)
@@ -450,5 +459,22 @@ module riscv_pipelined_cpu (
             default: WriteBackDataW = ALUResultW;
         endcase
     end
+
+    // ============================================
+    // DEBUG OUTPUTS
+    // ============================================
+    always_comb begin
+        case (DebugSelect)
+            2'b00: DebugData = ALUResultE;
+            2'b01: DebugData = WriteBackDataW;
+            2'b10: DebugData = ALUResultM;
+            2'b11: DebugData = InstrF;
+            default: DebugData = 32'b0;
+        endcase
+    end
+
+    assign DebugWriteBackRegister = RdW;
+    assign DebugRegWrite          = RegWriteW;
+    assign DebugMemoryWrite       = MemWriteM;
 
 endmodule
