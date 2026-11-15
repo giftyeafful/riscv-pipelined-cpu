@@ -111,6 +111,26 @@ module alu_tb;
             $display("ERROR: Zero detection test failed!");
         else
             $display("Zero detection test PASSED!");
+
+
+        
+always @(negedge clk) begin
+    if (!reset) begin
+        $display(
+            "PC=%0d | PCE=%0d | RdE=%0d | ALUCtrl=%b | A=%0d | B=%0d | ALUResult=%0d | RdW=%0d | WB=%0d",
+            dut.PC_out,
+            dut.PCE,
+            dut.RdE,
+            dut.ALUControlE,
+            dut.SrcAE,
+            dut.SrcBE,
+            dut.ALUResultE,
+            dut.RdW,
+            dut.WriteBackDataW
+        );
+    end
+end
+
         
 
         $finish;
